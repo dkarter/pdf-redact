@@ -5,6 +5,8 @@ Safe PDF text redaction CLI using PyMuPDF. It removes matched text with native P
 ## Features
 
 - Redact one or more terms with repeated `--term` flags
+- Redact regex patterns with repeated `--regex-term` flags
+- Load mixed exact and regex rules from a terms file
 - Process a single PDF or a directory of PDFs
 - Optional recursive directory scan
 - Optional case-insensitive matching
@@ -40,6 +42,7 @@ Single file:
 ```bash
 ./pdf-redact \
   --term "Jane Smith" \
+  --regex-term "\\b45D01-[0-9A-Z-]+\\b" \
   --term "123 Main St" \
   --source "./sources/input.pdf" \
   --output-path "./out"
@@ -68,12 +71,35 @@ Dry run (no output files written):
 
 ## CLI options
 
-- `--term <value>`: term to redact (repeatable, required)
+- `--term <value>`: term to redact (repeatable)
+- `--regex-term <pattern>`: regex pattern to redact (repeatable)
+- `--terms-file <path>`: rules file with one term per line
 - `--source <path>`: PDF file path or directory path (required)
 - `--output-path <dir>`: output directory for redacted PDFs (required)
 - `-r, --recursive`: recursively scan source directory for PDFs
 - `--case-insensitive`: case-insensitive term matching
 - `--dry-run`: scan only, do not write files
+
+At least one of `--term`, `--regex-term`, or `--terms-file` is required.
+
+## Terms file format
+
+Each non-empty line is one rule. Lines starting with `#` are comments.
+
+- Exact match term: `Jane Smith`
+- Regex term with prefix: `re:\b45D01-[0-9A-Z-]+\b` or `regex:\d{3}-\d{2}-\d{4}`
+- Regex term with slashes: `/\b[A-Z]{2}\d{6}\b/i` (supports `i`, `m`, `s` flags)
+
+Example `terms.txt`:
+
+```text
+# exact
+Jane Smith
+
+# regex
+re:\b\d{3}-\d{2}-\d{4}\b
+/\b45D01-[0-9A-Z-]+\b/i
+```
 
 ## Safety notes
 

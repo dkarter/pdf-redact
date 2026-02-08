@@ -1,0 +1,265 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import argparse
+import shutil
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+try:
+    import fitz  # PyMuPDF
+except ImportError as exc:  # pragma: no cover
+    print(
+        "Missing dependency: pymupdf. Install with: python -m pip install pymupdf",
+        file=sys.stderr,
+    )
+    raise SystemExit(2) from exc
+
+
+@dataclass
+class RedactResult:
+    input_path: Path
+    output_path: Path
+    matches: int
+    success: bool
+    error: str | None = None
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="pdf-redact",
+        description=(
+            "Safely redact terms from PDF files using native PDF redaction operations."
+        ),
+    )
+    parser.add_argument(
+        "--term",
+        dest="terms",
+        action="append",
+        required=True,
+        help="Term to redact. Repeat for multiple terms.",
+    )
+    parser.add_argument(
+        "--source",
+        required=True,
+        help="Path to a single PDF file or a directory containing PDFs.",
+    )
+    parser.add_argument(
+        "--output-path",
+        required=True,
+        help="Directory where redacted PDFs will be written.",
+    )
+    parser.add_argument(
+        "-r",
+        "--recursive",
+        action="store_true",
+        help="Recursively scan subdirectories when source is a directory.",
+    )
+    parser.add_argument(
+        "--case-insensitive",
+        action="store_true",
+        help="Match terms case-insensitively.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Scan and report matches without writing output files.",
+    )
+    return parser.parse_args()
+
+
+def list_pdf_inputs(source: Path, recursive: bool) -> list[Path]:
+    if not source.exists():
+        raise FileNotFoundError(f"Source does not exist: {source}")
+
+    if source.is_file():
+        if source.suffix.lower() != ".pdf":
+            raise ValueError(f"Source file is not a PDF: {source}")
+        return [source]
+
+    if source.is_dir():
+        pattern = "**/*.pdf" if recursive else "*.pdf"
+        files = sorted(source.glob(pattern))
+        if not files:
+            raise ValueError(f"No PDF files found in: {source}")
+        return [f for f in files if f.is_file()]
+
+    raise ValueError(f"Unsupported source type: {source}")
+
+
+def output_path_for(input_pdf: Path, source: Path, output_root: Path) -> Path:
+    if source.is_file():
+        return output_root / input_pdf.name
+    relative = input_pdf.relative_to(source)
+    return output_root / relative
+
+
+def _search_flags(case_insensitive: bool) -> int:
+    base = (
+        fitz.TEXT_DEHYPHENATE
+        | fitz.TEXT_PRESERVE_WHITESPACE
+        | fitz.TEXT_PRESERVE_LIGATURES
+    )
+    if case_insensitive:
+        base |= getattr(fitz, "TEXT_IGNORECASE", 0)
+    return base
+
+
+def redact_pdf(
+    input_pdf: Path,
+    output_pdf: Path,
+    terms: list[str],
+    case_insensitive: bool,
+    dry_run: bool,
+) -> RedactResult:
+    doc = None
+    temp_output: Path | None = None
+
+    try:
+        doc = fitz.open(input_pdf)
+        total_matches = 0
+        flags = _search_flags(case_insensitive)
+
+        for page in doc:
+            page_matches = 0
+            for term in terms:
+                rects = page.search_for(term, flags=flags)
+                if not rects:
+                    continue
+                page_matches += len(rects)
+                for rect in rects:
+                    page.add_redact_annot(rect, fill=(0, 0, 0), text="")
+
+            if page_matches > 0 and not dry_run:
+                page.apply_redactions()
+            total_matches += page_matches
+
+        if dry_run:
+            return RedactResult(
+                input_path=input_pdf,
+                output_path=output_pdf,
+                matches=total_matches,
+                success=True,
+            )
+
+        output_pdf.parent.mkdir(parents=True, exist_ok=True)
+
+        with NamedTemporaryFile(
+            mode="wb",
+            prefix=f"{output_pdf.stem}.",
+            suffix=".tmp.pdf",
+            dir=output_pdf.parent,
+            delete=False,
+        ) as tmpf:
+            temp_output = Path(tmpf.name)
+
+        if total_matches == 0:
+            shutil.copy2(input_pdf, temp_output)
+        else:
+            doc.save(
+                temp_output,
+                incremental=False,
+                garbage=4,
+                clean=True,
+                deflate=True,
+            )
+
+        verify_redaction(temp_output, terms, case_insensitive)
+        temp_output.replace(output_pdf)
+
+        return RedactResult(
+            input_path=input_pdf,
+            output_path=output_pdf,
+            matches=total_matches,
+            success=True,
+        )
+    except Exception as exc:  # broad by design for CLI reporting
+        if temp_output and temp_output.exists():
+            temp_output.unlink(missing_ok=True)
+        return RedactResult(
+            input_path=input_pdf,
+            output_path=output_pdf,
+            matches=0,
+            success=False,
+            error=str(exc),
+        )
+    finally:
+        if doc is not None:
+            doc.close()
+
+
+def verify_redaction(pdf_path: Path, terms: list[str], case_insensitive: bool) -> None:
+    lowered_terms = [term.lower() for term in terms]
+
+    with fitz.open(pdf_path) as doc:
+        extracted = "\n".join(page.get_text("text") for page in doc)
+
+    haystack = extracted.lower() if case_insensitive else extracted
+
+    for i, term in enumerate(terms):
+        needle = lowered_terms[i] if case_insensitive else term
+        if needle and needle in haystack:
+            raise RuntimeError(
+                f"Verification failed: term still found in extracted text: {term!r}"
+            )
+
+    raw = pdf_path.read_bytes()
+    raw_haystack = raw.lower() if case_insensitive else raw
+    for i, term in enumerate(terms):
+        needle = (lowered_terms[i] if case_insensitive else term).encode("utf-8")
+        if needle and needle in raw_haystack:
+            raise RuntimeError(
+                f"Verification warning: term bytes still appear in file: {term!r}"
+            )
+
+
+def main() -> int:
+    args = parse_args()
+    source = Path(args.source).expanduser().resolve()
+    output_root = Path(args.output_path).expanduser().resolve()
+    terms = [term for term in args.terms if term]
+
+    if not terms:
+        print("At least one non-empty --term is required.", file=sys.stderr)
+        return 2
+
+    output_root.mkdir(parents=True, exist_ok=True)
+
+    try:
+        inputs = list_pdf_inputs(source, args.recursive)
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    results: list[RedactResult] = []
+    for input_pdf in inputs:
+        output_pdf = output_path_for(input_pdf, source, output_root)
+        result = redact_pdf(
+            input_pdf=input_pdf,
+            output_pdf=output_pdf,
+            terms=terms,
+            case_insensitive=args.case_insensitive,
+            dry_run=args.dry_run,
+        )
+        results.append(result)
+
+        if result.success:
+            mode = "DRY-RUN" if args.dry_run else "OK"
+            print(f"[{mode}] {result.input_path} -> {result.output_path} ({result.matches} matches)")
+        else:
+            print(f"[ERROR] {result.input_path}: {result.error}", file=sys.stderr)
+
+    failures = [r for r in results if not r.success]
+    total_matches = sum(r.matches for r in results)
+    print(
+        f"Processed {len(results)} file(s), {len(failures)} failure(s), {total_matches} total match(es)."
+    )
+
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

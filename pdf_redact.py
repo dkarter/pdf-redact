@@ -7,15 +7,31 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import TYPE_CHECKING, Any
 
-try:
+if TYPE_CHECKING:
     import fitz  # PyMuPDF
-except ImportError as exc:  # pragma: no cover
-    print(
-        "Missing dependency: pymupdf. Install with: python -m pip install pymupdf",
-        file=sys.stderr,
-    )
-    raise SystemExit(2) from exc
+
+
+_FITZ: Any | None = None
+
+
+def _require_fitz() -> Any:
+    global _FITZ
+    if _FITZ is not None:
+        return _FITZ
+
+    try:
+        import fitz as pymupdf
+    except ImportError as exc:  # pragma: no cover
+        print(
+            "Missing dependency: pymupdf. Install with: python -m pip install pymupdf",
+            file=sys.stderr,
+        )
+        raise SystemExit(2) from exc
+
+    _FITZ = pymupdf
+    return _FITZ
 
 
 @dataclass
@@ -211,6 +227,7 @@ def output_path_for(input_pdf: Path, source: Path, output_root: Path) -> Path:
 
 
 def _search_flags(case_insensitive: bool) -> int:
+    fitz = _require_fitz()
     base = (
         fitz.TEXT_DEHYPHENATE
         | fitz.TEXT_PRESERVE_WHITESPACE
@@ -222,6 +239,7 @@ def _search_flags(case_insensitive: bool) -> int:
 
 
 def _regex_rects_for_page(page: fitz.Page, regex_rules: list[RegexRule]) -> tuple[list[fitz.Rect], int]:
+    fitz = _require_fitz()
     if not regex_rules:
         return [], 0
 
@@ -283,6 +301,7 @@ def redact_pdf(
     dry_run: bool,
     verify_on_match: str,
 ) -> RedactResult:
+    fitz = _require_fitz()
     doc = None
     temp_output: Path | None = None
 
@@ -389,6 +408,7 @@ def verify_redaction(
     case_insensitive: bool,
     verify_on_match: str,
 ) -> None:
+    fitz = _require_fitz()
     warning_prefix = "[VERIFY WARNING]"
     if sys.stderr.isatty():
         warning_prefix = "\x1b[33m[VERIFY WARNING]\x1b[0m"

@@ -47,7 +47,7 @@ jobs:
         run: python -m pip install --upgrade pip pyinstaller -r requirements.txt
 
       - name: Build binary with PyInstaller
-        run: pyinstaller --clean --onefile --name pdf-redact pdf_redact.py
+        run: pyinstaller --clean --onedir --name pdf-redact pdf_redact.py
 
       - name: Package archive (linux/macos)
         if: runner.os != 'Windows'
@@ -55,7 +55,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           ASSET_NAME="pdf-redact-v${VERSION}-${{ matrix.target_os }}-${{ matrix.target_arch }}.${{ matrix.archive_ext }}"
-          tar -czf "${ASSET_NAME}" -C dist pdf-redact
+          tar -czf "${ASSET_NAME}" -C dist/pdf-redact .
           echo "ASSET_NAME=${ASSET_NAME}" >> "$GITHUB_ENV"
 
       - name: Package archive (windows)
@@ -64,7 +64,7 @@ jobs:
         run: |
           $version = $env:GITHUB_REF_NAME -replace '^v', ''
           $assetName = "pdf-redact-v$version-${{ matrix.target_os }}-${{ matrix.target_arch }}.${{ matrix.archive_ext }}"
-          Compress-Archive -Path dist/pdf-redact.exe -DestinationPath $assetName
+          Compress-Archive -Path dist/pdf-redact/* -DestinationPath $assetName
           "ASSET_NAME=$assetName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Upload asset to release

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/dkarter/pdf-redact/compare/v0.2.0...v0.2.1) (2026-02-09)
+
+
+### Bug Fixes
+
+* release trigger ([fbb800b](https://github.com/dkarter/pdf-redact/commit/fbb800b3f156f632e845519c3bf2e7c065757cbd))
+
 ## [0.2.0](https://github.com/dkarter/pdf-redact/compare/v0.1.0...v0.2.0) (2026-02-09)
 
 

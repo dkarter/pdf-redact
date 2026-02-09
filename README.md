@@ -135,6 +135,34 @@ Verification strict mode (fail file when verification still matches):
 
 At least one of `--term`, `--regex-term`, or `--terms-file` is required.
 
+## Shell completions (usage)
+
+This repo includes a usage spec at `pdf-redact.usage.kdl`.
+
+The CLI can print embedded completion scripts directly:
+
+```bash
+pdf-redact completion zsh
+pdf-redact completion bash
+pdf-redact completion fish
+```
+
+Install `usage`:
+
+```bash
+mise use -g usage
+```
+
+Generate completions:
+
+```bash
+usage g completion bash pdf-redact -f ./pdf-redact.usage.kdl > ~/.bash_completions/pdf-redact.bash
+usage g completion zsh pdf-redact -f ./pdf-redact.usage.kdl > ~/.zsh_completions/_pdf-redact
+usage g completion fish pdf-redact -f ./pdf-redact.usage.kdl > ~/.config/fish/completions/pdf-redact.fish
+```
+
+Note: generated completion scripts call `usage` at runtime, so `usage` must be installed on machines using these completions.
+
 ## Terms file format
 
 Each non-empty line is one rule. Lines starting with `#` are comments.

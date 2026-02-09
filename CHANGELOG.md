@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.5](https://github.com/dkarter/pdf-redact/compare/v0.2.4...v0.2.5) (2026-02-09)
+
+
+### Bug Fixes
+
+* pull completions from release and include in release assets ([e2c786f](https://github.com/dkarter/pdf-redact/commit/e2c786f83b4b466211f6df74e655b96fffddae01))
+* remove outdated install instructions ([c30bd2c](https://github.com/dkarter/pdf-redact/commit/c30bd2c9e6dbc0d3f2e5113b4b2da5f2599974fe))
+* remove setup-python ([f36fc62](https://github.com/dkarter/pdf-redact/commit/f36fc6237681562314d2c8511df3f5066d24ad25))
+
 ## [0.2.4](https://github.com/dkarter/pdf-redact/compare/v0.2.3...v0.2.4) (2026-02-09)
 
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.4](https://github.com/dkarter/pdf-redact/compare/v0.2.3...v0.2.4) (2026-02-09)
+
+
+### Bug Fixes
+
+* formatting ([1090adc](https://github.com/dkarter/pdf-redact/commit/1090adcd30118f9e89d7a9e604fba0c7f43c8c9e))
+
+
+### Documentation
+
+* adopt AGPL-3.0-or-later licensing ([56874d8](https://github.com/dkarter/pdf-redact/commit/56874d8ec2355ee1ea9bb5c802f0bffd99f5f870))
+* document completion command usage ([e0c711f](https://github.com/dkarter/pdf-redact/commit/e0c711f6e4acaa5f3a577a7a6528e42c27543d1d))
+
 ## [0.2.3](https://github.com/dkarter/pdf-redact/compare/v0.2.2...v0.2.3) (2026-02-09)
 
 

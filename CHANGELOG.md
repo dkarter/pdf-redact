@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/dkarter/pdf-redact/compare/v0.2.1...v0.2.2) (2026-02-09)
+
+
+### Bug Fixes
+
+* macos intel build + bump arm build base image ([aa26d03](https://github.com/dkarter/pdf-redact/commit/aa26d03077a6c98316889e76f3f21cc2831fa9cb))
+
 ## [0.2.1](https://github.com/dkarter/pdf-redact/compare/v0.2.0...v0.2.1) (2026-02-09)
 
 

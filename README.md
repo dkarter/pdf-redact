@@ -170,3 +170,4 @@ No automated redaction tool can guarantee semantic perfection for every PDF stru
 - `release-please` runs on `main` and opens/updates release PRs from conventional commits.
 - When a release is published, GitHub Actions builds PyInstaller binaries for Linux, macOS (x64 + arm64), and Windows.
 - Assets are uploaded with names like `pdf-redact-v1.2.3-darwin-arm64.tar.gz`, which the mise GitHub backend can detect.
+- `release-please` should run with a PAT stored as `RELEASE_PLEASE_TOKEN` (repo secret) so release events can trigger downstream workflows.

@@ -35,6 +35,32 @@ Using uv:
 uv pip install -r requirements.txt
 ```
 
+## Install as a global CLI
+
+Using uv directly from a git repo:
+
+```bash
+uv tool install "git+https://github.com/dkarter/pdf-redact.git"
+```
+
+Using uv from a local checkout:
+
+```bash
+uv tool install .
+```
+
+Using mise with the pipx backend (which uses uv under the hood):
+
+```bash
+mise use -g "pipx:git+https://github.com/dkarter/pdf-redact.git"
+```
+
+After install, verify:
+
+```bash
+pdf-redact --help
+```
+
 ## Usage
 
 Single file:

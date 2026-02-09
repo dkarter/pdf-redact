@@ -18,7 +18,7 @@ _FITZ: Any | None = None
 COMPLETION_FILES = {
     "bash": "pdf-redact.bash",
     "fish": "pdf-redact.fish",
-    "zsh": "_pdf-redact",
+    "zsh": "pdf-redact.zsh",
 }
 
 

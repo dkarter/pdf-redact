@@ -1,0 +1,10 @@
+version: "3"
+
+tasks:
+  generate:
+    desc: Generate shell completion scripts from usage spec
+    cmds:
+      - mkdir -p src/pdf_redact/completions
+      - usage g completion bash pdf-redact -f ./pdf-redact.usage.kdl > ./src/pdf_redact/completions/pdf-redact.bash
+      - usage g completion zsh pdf-redact -f ./pdf-redact.usage.kdl > ./src/pdf_redact/completions/pdf-redact.zsh
+      - usage g completion fish pdf-redact -f ./pdf-redact.usage.kdl > ./src/pdf_redact/completions/pdf-redact.fish

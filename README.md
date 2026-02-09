@@ -157,7 +157,7 @@ Generate completions:
 
 ```bash
 usage g completion bash pdf-redact -f ./pdf-redact.usage.kdl > ~/.bash_completions/pdf-redact.bash
-usage g completion zsh pdf-redact -f ./pdf-redact.usage.kdl > ~/.zsh_completions/_pdf-redact
+usage g completion zsh pdf-redact -f ./pdf-redact.usage.kdl > ~/.zsh_completions/pdf-redact.zsh
 usage g completion fish pdf-redact -f ./pdf-redact.usage.kdl > ~/.config/fish/completions/pdf-redact.fish
 ```
 

@@ -1,2 +1,4 @@
 [tools]
 python = "3.14.3"
+task = "latest"
+usage = "latest"

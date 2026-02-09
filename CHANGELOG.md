@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/dkarter/pdf-redact/compare/v0.2.2...v0.2.3) (2026-02-09)
+
+
+### Performance Improvements
+
+* improve startup time for binary ([ddc0caf](https://github.com/dkarter/pdf-redact/commit/ddc0caf447c131bc38d74d4422da2bf5c6186649))
+
 ## [0.2.2](https://github.com/dkarter/pdf-redact/compare/v0.2.1...v0.2.2) (2026-02-09)
 
 

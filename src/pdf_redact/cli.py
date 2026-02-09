@@ -24,12 +24,8 @@ COMPLETION_FILES = {
     "zsh": "pdf-redact.zsh",
 }
 COMPLETION_RELEASE_URL_TEMPLATE = "https://github.com/dkarter/pdf-redact/releases/download/{tag}/{filename}"
-COMPLETION_TAG_URL_TEMPLATE = (
-    "https://raw.githubusercontent.com/dkarter/pdf-redact/{tag}/src/pdf_redact/completions/{filename}"
-)
-COMPLETION_MAIN_URL_TEMPLATE = (
-    "https://raw.githubusercontent.com/dkarter/pdf-redact/main/src/pdf_redact/completions/{filename}"
-)
+COMPLETION_TAG_URL_TEMPLATE = "https://raw.githubusercontent.com/dkarter/pdf-redact/{tag}/src/pdf_redact/completions/{filename}"
+COMPLETION_MAIN_URL_TEMPLATE = "https://raw.githubusercontent.com/dkarter/pdf-redact/main/src/pdf_redact/completions/{filename}"
 
 
 def _require_fitz() -> Any:
@@ -502,9 +498,7 @@ def print_completion(shell: str) -> None:
             last_error = exc
 
     if not data:
-        raise RuntimeError(
-            f"Unable to load {shell} completion script from embedded resources or GitHub: {last_error}"
-        ) from last_error
+        raise RuntimeError(f"Unable to load {shell} completion script from embedded resources or GitHub: {last_error}") from last_error
 
     print(data, end="")
 

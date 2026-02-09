@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.6](https://github.com/dkarter/pdf-redact/compare/v0.2.5...v0.2.6) (2026-02-09)
+
+
+### Bug Fixes
+
+* generate completions in CI only once ([17117f5](https://github.com/dkarter/pdf-redact/commit/17117f501e35fe438bb3f8f37d22c873eb632101))
+
 ## [0.2.5](https://github.com/dkarter/pdf-redact/compare/v0.2.4...v0.2.5) (2026-02-09)
 
 

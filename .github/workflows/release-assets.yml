@@ -1,0 +1,74 @@
+name: release-assets
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target_os: linux
+            target_arch: x64
+            archive_ext: tar.gz
+          - runner: macos-13
+            target_os: darwin
+            target_arch: x64
+            archive_ext: tar.gz
+          - runner: macos-14
+            target_os: darwin
+            target_arch: arm64
+            archive_ext: tar.gz
+          - runner: windows-latest
+            target_os: windows
+            target_arch: x64
+            archive_ext: zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: python -m pip install --upgrade pip pyinstaller -r requirements.txt
+
+      - name: Build binary with PyInstaller
+        run: pyinstaller --clean --onefile --name pdf-redact pdf_redact.py
+
+      - name: Package archive (linux/macos)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ASSET_NAME="pdf-redact-v${VERSION}-${{ matrix.target_os }}-${{ matrix.target_arch }}.${{ matrix.archive_ext }}"
+          tar -czf "${ASSET_NAME}" -C dist pdf-redact
+          echo "ASSET_NAME=${ASSET_NAME}" >> "$GITHUB_ENV"
+
+      - name: Package archive (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          $assetName = "pdf-redact-v$version-${{ matrix.target_os }}-${{ matrix.target_arch }}.${{ matrix.archive_ext }}"
+          Compress-Archive -Path dist/pdf-redact.exe -DestinationPath $assetName
+          "ASSET_NAME=$assetName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Upload asset to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: ${{ env.ASSET_NAME }}

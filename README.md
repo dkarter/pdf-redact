@@ -43,6 +43,12 @@ Using uv directly from a git repo:
 uv tool install "git+https://github.com/dkarter/pdf-redact.git"
 ```
 
+Using mise from GitHub releases (published binaries):
+
+```bash
+mise use -g "github:dkarter/pdf-redact"
+```
+
 Using uv from a local checkout:
 
 ```bash
@@ -158,3 +164,9 @@ re:\b\d{3}-\d{2}-\d{4}\b
 - `--verify-on-match fail` treats verification hits as file failures.
 
 No automated redaction tool can guarantee semantic perfection for every PDF structure, so spot-check output visually and with text extraction when handling sensitive records.
+
+## Release automation
+
+- `release-please` runs on `main` and opens/updates release PRs from conventional commits.
+- When a release is published, GitHub Actions builds PyInstaller binaries for Linux, macOS (x64 + arm64), and Windows.
+- Assets are uploaded with names like `pdf-redact-v1.2.3-darwin-arm64.tar.gz`, which the mise GitHub backend can detect.

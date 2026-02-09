@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.7](https://github.com/dkarter/pdf-redact/compare/v0.2.6...v0.2.7) (2026-02-09)
+
+
+### Bug Fixes
+
+* windows build ([23efda8](https://github.com/dkarter/pdf-redact/commit/23efda80fc69dab4d49b2ae57909983821720256))
+
 ## [0.2.6](https://github.com/dkarter/pdf-redact/compare/v0.2.5...v0.2.6) (2026-02-09)
 
 

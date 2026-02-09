@@ -5,6 +5,7 @@ import re
 import shutil
 import sys
 from dataclasses import dataclass
+from importlib import resources
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Any
@@ -14,6 +15,11 @@ if TYPE_CHECKING:
 
 
 _FITZ: Any | None = None
+COMPLETION_FILES = {
+    "bash": "pdf-redact.bash",
+    "fish": "pdf-redact.fish",
+    "zsh": "_pdf-redact",
+}
 
 
 def _require_fitz() -> Any:
@@ -56,6 +62,18 @@ def parse_args() -> argparse.Namespace:
             "Safely redact terms from PDF files using native PDF redaction operations."
         ),
     )
+
+    subparsers = parser.add_subparsers(dest="command")
+    completion_parser = subparsers.add_parser(
+        "completion",
+        help="Print shell completion script.",
+    )
+    completion_parser.add_argument(
+        "shell",
+        choices=sorted(COMPLETION_FILES),
+        help="Shell type to output completion script for.",
+    )
+
     parser.add_argument(
         "--term",
         dest="terms",
@@ -82,12 +100,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--source",
-        required=True,
         help="Path to a single PDF file or a directory containing PDFs.",
     )
     parser.add_argument(
         "--output-path",
-        required=True,
         help="Directory where redacted PDFs will be written.",
     )
     parser.add_argument(
@@ -147,7 +163,7 @@ def parse_terms_file(file_path: Path) -> tuple[list[str], list[tuple[str, int]]]
     literal_terms: list[str] = []
     regex_terms: list[tuple[str, int]] = []
 
-    for line_number, raw_line in enumerate(file_path.read_text(encoding="utf-8").splitlines(), 1):
+    for raw_line in file_path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
@@ -173,7 +189,9 @@ def parse_terms_file(file_path: Path) -> tuple[list[str], list[tuple[str, int]]]
 
 def build_term_sets(args: argparse.Namespace) -> tuple[list[str], list[RegexRule]]:
     exact_terms = [term for term in args.terms if term]
-    regex_specs: list[tuple[str, int]] = [(pattern, 0) for pattern in args.regex_terms if pattern]
+    regex_specs: list[tuple[str, int]] = [
+        (pattern, 0) for pattern in args.regex_terms if pattern
+    ]
 
     for file_arg in args.terms_files:
         file_path = Path(file_arg).expanduser().resolve()
@@ -238,7 +256,10 @@ def _search_flags(case_insensitive: bool) -> int:
     return base
 
 
-def _regex_rects_for_page(page: fitz.Page, regex_rules: list[RegexRule]) -> tuple[list[fitz.Rect], int]:
+def _regex_rects_for_page(
+    page: fitz.Page,
+    regex_rules: list[RegexRule],
+) -> tuple[list[fitz.Rect], int]:
     fitz = _require_fitz()
     if not regex_rules:
         return [], 0
@@ -249,8 +270,17 @@ def _regex_rects_for_page(page: fitz.Page, regex_rules: list[RegexRule]) -> tupl
 
     grouped: dict[tuple[int, int], list[tuple[float, float, float, float, str, int]]] = {}
     for word in words:
-        x0, y0, x1, y1, text, block_no, line_no, word_no = word
-        grouped.setdefault((block_no, line_no), []).append((x0, y0, x1, y1, text, word_no))
+        x0 = float(word[0])
+        y0 = float(word[1])
+        x1 = float(word[2])
+        y1 = float(word[3])
+        text = str(word[4])
+        block_no = int(word[5])
+        line_no = int(word[6])
+        word_no = int(word[7])
+        grouped.setdefault((block_no, line_no), []).append(
+            (x0, y0, x1, y1, text, word_no)
+        )
 
     rects: list[fitz.Rect] = []
     match_count = 0
@@ -450,8 +480,28 @@ def verify_redaction(
         print(f"{warning_prefix} {issue}", file=sys.stderr)
 
 
+def print_completion(shell: str) -> None:
+    filename = COMPLETION_FILES[shell]
+    data = resources.files("pdf_redact.completions").joinpath(filename).read_text(
+        encoding="utf-8"
+    )
+    print(data, end="")
+
+
 def main() -> int:
     args = parse_args()
+
+    if args.command == "completion":
+        print_completion(args.shell)
+        return 0
+
+    if not args.source:
+        print("--source is required", file=sys.stderr)
+        return 2
+    if not args.output_path:
+        print("--output-path is required", file=sys.stderr)
+        return 2
+
     source = Path(args.source).expanduser().resolve()
     output_root = Path(args.output_path).expanduser().resolve()
     try:
@@ -484,7 +534,9 @@ def main() -> int:
 
         if result.success:
             mode = "DRY-RUN" if args.dry_run else "OK"
-            print(f"[{mode}] {result.input_path} -> {result.output_path} ({result.matches} matches)")
+            print(
+                f"[{mode}] {result.input_path} -> {result.output_path} ({result.matches} matches)"
+            )
         else:
             print(f"[ERROR] {result.input_path}: {result.error}", file=sys.stderr)
 

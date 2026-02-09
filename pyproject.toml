@@ -13,4 +13,15 @@ dependencies = [
 ]
 
 [project.scripts]
-pdf-redact = "pdf_redact:main"
+pdf-redact = "pdf_redact.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pdf_redact"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/README.md",
+  "/pyproject.toml",
+  "/requirements.txt",
+]

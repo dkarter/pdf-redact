@@ -47,7 +47,7 @@ jobs:
         run: python -m pip install --upgrade pip pyinstaller -r requirements.txt
 
       - name: Build binary with PyInstaller
-        run: pyinstaller --clean --onedir --name pdf-redact pdf_redact.py
+        run: pyinstaller --clean --onedir --name pdf-redact --collect-data pdf_redact src/pdf_redact/cli.py
 
       - name: Package archive (linux/macos)
         if: runner.os != 'Windows'

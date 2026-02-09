@@ -5,10 +5,13 @@ import re
 import shutil
 import sys
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version
 from importlib import resources
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Any
+from urllib.error import URLError
+from urllib.request import urlopen
 
 if TYPE_CHECKING:
     import fitz  # PyMuPDF
@@ -20,6 +23,13 @@ COMPLETION_FILES = {
     "fish": "pdf-redact.fish",
     "zsh": "pdf-redact.zsh",
 }
+COMPLETION_RELEASE_URL_TEMPLATE = "https://github.com/dkarter/pdf-redact/releases/download/{tag}/{filename}"
+COMPLETION_TAG_URL_TEMPLATE = (
+    "https://raw.githubusercontent.com/dkarter/pdf-redact/{tag}/src/pdf_redact/completions/{filename}"
+)
+COMPLETION_MAIN_URL_TEMPLATE = (
+    "https://raw.githubusercontent.com/dkarter/pdf-redact/main/src/pdf_redact/completions/{filename}"
+)
 
 
 def _require_fitz() -> Any:
@@ -458,7 +468,44 @@ def verify_redaction(
 
 def print_completion(shell: str) -> None:
     filename = COMPLETION_FILES[shell]
-    data = resources.files("pdf_redact.completions").joinpath(filename).read_text(encoding="utf-8")
+    data: str | None = None
+
+    try:
+        data = resources.files("pdf_redact.completions").joinpath(filename).read_text(encoding="utf-8")
+    except (FileNotFoundError, ModuleNotFoundError):
+        data = None
+
+    if data:
+        print(data, end="")
+        return
+
+    urls: list[str] = []
+    try:
+        current_version = version("pdf-redact")
+    except PackageNotFoundError:
+        current_version = ""
+
+    if current_version:
+        tag = current_version if current_version.startswith("v") else f"v{current_version}"
+        urls.append(COMPLETION_RELEASE_URL_TEMPLATE.format(tag=tag, filename=filename))
+        urls.append(COMPLETION_TAG_URL_TEMPLATE.format(tag=tag, filename=filename))
+
+    urls.append(COMPLETION_MAIN_URL_TEMPLATE.format(filename=filename))
+
+    last_error: Exception | None = None
+    for url in urls:
+        try:
+            with urlopen(url, timeout=10) as response:
+                data = response.read().decode("utf-8")
+            break
+        except (URLError, TimeoutError, UnicodeDecodeError) as exc:
+            last_error = exc
+
+    if not data:
+        raise RuntimeError(
+            f"Unable to load {shell} completion script from embedded resources or GitHub: {last_error}"
+        ) from last_error
+
     print(data, end="")
 
 

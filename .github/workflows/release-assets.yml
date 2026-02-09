@@ -43,6 +43,12 @@ jobs:
         with:
           python-version: '3.14'
 
+      - name: Set up mise
+        uses: jdx/mise-action@v3.6.1
+
+      - name: Generate shell completions
+        run: task completions:generate
+
       - name: Install build dependencies
         run: python -m pip install --upgrade pip pyinstaller -r requirements.txt
 
@@ -72,3 +78,13 @@ jobs:
         with:
           tag_name: ${{ github.event.release.tag_name }}
           files: ${{ env.ASSET_NAME }}
+
+      - name: Upload completion assets to release
+        if: matrix.target_os == 'linux'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: |
+            src/pdf_redact/completions/pdf-redact.bash
+            src/pdf_redact/completions/pdf-redact.zsh
+            src/pdf_redact/completions/pdf-redact.fish

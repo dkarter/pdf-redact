@@ -199,3 +199,8 @@ No automated redaction tool can guarantee semantic perfection for every PDF stru
 - When a release is published, GitHub Actions builds PyInstaller binaries for Linux, macOS (x64 + arm64), and Windows.
 - Assets are uploaded with names like `pdf-redact-v1.2.3-darwin-arm64.tar.gz`, which the mise GitHub backend can detect.
 - `release-please` should run with a PAT stored as `RELEASE_PLEASE_TOKEN` (repo secret) so release events can trigger downstream workflows.
+
+## License
+
+This project is licensed under the GNU Affero General Public License v3.0 or later (`AGPL-3.0-or-later`).
+See `LICENSE` for the full text.

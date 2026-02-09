@@ -7,6 +7,7 @@ name = "pdf-redact"
 version = "0.2.3"
 description = "Safe PDF redaction CLI using PyMuPDF"
 readme = "README.md"
+license = { text = "AGPL-3.0-or-later" }
 requires-python = ">=3.12"
 dependencies = [
   "pymupdf>=1.24.0",

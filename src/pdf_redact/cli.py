@@ -58,9 +58,7 @@ class RegexRule:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="pdf-redact",
-        description=(
-            "Safely redact terms from PDF files using native PDF redaction operations."
-        ),
+        description=("Safely redact terms from PDF files using native PDF redaction operations."),
     )
 
     subparsers = parser.add_subparsers(dest="command")
@@ -93,10 +91,7 @@ def parse_args() -> argparse.Namespace:
         dest="terms_files",
         action="append",
         default=[],
-        help=(
-            "File with one term per line. Plain lines are exact terms. "
-            "Regex lines can start with 're:' or 'regex:' (also supports /pattern/flags)."
-        ),
+        help=("File with one term per line. Plain lines are exact terms. Regex lines can start with 're:' or 'regex:' (also supports /pattern/flags)."),
     )
     parser.add_argument(
         "--source",
@@ -126,10 +121,7 @@ def parse_args() -> argparse.Namespace:
         "--verify-on-match",
         choices=("warn", "fail"),
         default="warn",
-        help=(
-            "Behavior when verification still finds redacted terms in output: "
-            "'warn' logs and continues, 'fail' marks the file as failed."
-        ),
+        help=("Behavior when verification still finds redacted terms in output: 'warn' logs and continues, 'fail' marks the file as failed."),
     )
     return parser.parse_args()
 
@@ -189,9 +181,7 @@ def parse_terms_file(file_path: Path) -> tuple[list[str], list[tuple[str, int]]]
 
 def build_term_sets(args: argparse.Namespace) -> tuple[list[str], list[RegexRule]]:
     exact_terms = [term for term in args.terms if term]
-    regex_specs: list[tuple[str, int]] = [
-        (pattern, 0) for pattern in args.regex_terms if pattern
-    ]
+    regex_specs: list[tuple[str, int]] = [(pattern, 0) for pattern in args.regex_terms if pattern]
 
     for file_arg in args.terms_files:
         file_path = Path(file_arg).expanduser().resolve()
@@ -202,9 +192,7 @@ def build_term_sets(args: argparse.Namespace) -> tuple[list[str], list[RegexRule
         regex_specs.extend(from_file_regex)
 
     if not exact_terms and not regex_specs:
-        raise ValueError(
-            "At least one term is required via --term, --regex-term, or --terms-file."
-        )
+        raise ValueError("At least one term is required via --term, --regex-term, or --terms-file.")
 
     regex_rules: list[RegexRule] = []
     for pattern_text, extra_flags in regex_specs:
@@ -246,11 +234,7 @@ def output_path_for(input_pdf: Path, source: Path, output_root: Path) -> Path:
 
 def _search_flags(case_insensitive: bool) -> int:
     fitz = _require_fitz()
-    base = (
-        fitz.TEXT_DEHYPHENATE
-        | fitz.TEXT_PRESERVE_WHITESPACE
-        | fitz.TEXT_PRESERVE_LIGATURES
-    )
+    base = fitz.TEXT_DEHYPHENATE | fitz.TEXT_PRESERVE_WHITESPACE | fitz.TEXT_PRESERVE_LIGATURES
     if case_insensitive:
         base |= getattr(fitz, "TEXT_IGNORECASE", 0)
     return base
@@ -278,9 +262,7 @@ def _regex_rects_for_page(
         block_no = int(word[5])
         line_no = int(word[6])
         word_no = int(word[7])
-        grouped.setdefault((block_no, line_no), []).append(
-            (x0, y0, x1, y1, text, word_no)
-        )
+        grouped.setdefault((block_no, line_no), []).append((x0, y0, x1, y1, text, word_no))
 
     rects: list[fitz.Rect] = []
     match_count = 0
@@ -310,11 +292,7 @@ def _regex_rects_for_page(
             for match in rule.compiled.finditer(line_text):
                 if match.start() == match.end():
                     continue
-                hit_rects = [
-                    rect
-                    for start, end, rect in spans
-                    if start < match.end() and end > match.start()
-                ]
+                hit_rects = [rect for start, end, rect in spans if start < match.end() and end > match.start()]
                 if hit_rects:
                     rects.extend(hit_rects)
                     match_count += 1
@@ -459,9 +437,7 @@ def verify_redaction(
 
     for rule in regex_rules:
         if rule.compiled.search(extracted):
-            issues.append(
-                f"regex still matched extracted text: {rule.pattern_text!r}"
-            )
+            issues.append(f"regex still matched extracted text: {rule.pattern_text!r}")
 
     raw = pdf_path.read_bytes()
     raw_haystack = raw.lower() if case_insensitive else raw
@@ -482,9 +458,7 @@ def verify_redaction(
 
 def print_completion(shell: str) -> None:
     filename = COMPLETION_FILES[shell]
-    data = resources.files("pdf_redact.completions").joinpath(filename).read_text(
-        encoding="utf-8"
-    )
+    data = resources.files("pdf_redact.completions").joinpath(filename).read_text(encoding="utf-8")
     print(data, end="")
 
 
@@ -534,17 +508,13 @@ def main() -> int:
 
         if result.success:
             mode = "DRY-RUN" if args.dry_run else "OK"
-            print(
-                f"[{mode}] {result.input_path} -> {result.output_path} ({result.matches} matches)"
-            )
+            print(f"[{mode}] {result.input_path} -> {result.output_path} ({result.matches} matches)")
         else:
             print(f"[ERROR] {result.input_path}: {result.error}", file=sys.stderr)
 
     failures = [r for r in results if not r.success]
     total_matches = sum(r.matches for r in results)
-    print(
-        f"Processed {len(results)} file(s), {len(failures)} failure(s), {total_matches} total match(es)."
-    )
+    print(f"Processed {len(results)} file(s), {len(failures)} failure(s), {total_matches} total match(es).")
 
     return 1 if failures else 0
 

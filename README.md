@@ -11,7 +11,7 @@ Safe PDF text redaction CLI using PyMuPDF. It removes matched text with native P
 - Optional recursive directory scan
 - Optional case-insensitive matching
 - Dry-run mode to preview match counts
-- Verification step to ensure terms are not present in extracted text
+- Verification step with configurable `warn`/`fail` behavior when matches remain
 
 ## Prerequisites
 
@@ -95,6 +95,26 @@ Dry run (no output files written):
   --dry-run
 ```
 
+Verification warning mode (default: keep output file, print warning):
+
+```bash
+./pdf-redact \
+  --term "Jane Smith" \
+  --source "./sources/input.pdf" \
+  --output-path "./out" \
+  --verify-on-match warn
+```
+
+Verification strict mode (fail file when verification still matches):
+
+```bash
+./pdf-redact \
+  --term "Jane Smith" \
+  --source "./sources/input.pdf" \
+  --output-path "./out" \
+  --verify-on-match fail
+```
+
 ## CLI options
 
 - `--term <value>`: term to redact (repeatable)
@@ -105,6 +125,7 @@ Dry run (no output files written):
 - `-r, --recursive`: recursively scan source directory for PDFs
 - `--case-insensitive`: case-insensitive term matching
 - `--dry-run`: scan only, do not write files
+- `--verify-on-match <warn|fail>`: verification behavior when terms still appear (`warn` prints warning and continues, `fail` marks file as failed)
 
 At least one of `--term`, `--regex-term`, or `--terms-file` is required.
 
@@ -132,6 +153,8 @@ re:\b\d{3}-\d{2}-\d{4}\b
 - Input files are never modified in place.
 - Output is written to a temp file and atomically moved into place.
 - For matched files, save uses full rewrite settings (`incremental=False`, garbage collection, stream cleanup).
-- A verification pass checks that terms are absent from extracted text.
+- A verification pass checks extracted text and raw bytes in output PDFs.
+- `--verify-on-match warn` (default) prints warnings and still writes output.
+- `--verify-on-match fail` treats verification hits as file failures.
 
 No automated redaction tool can guarantee semantic perfection for every PDF structure, so spot-check output visually and with text extraction when handling sensitive records.

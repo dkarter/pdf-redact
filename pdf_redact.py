@@ -90,6 +90,15 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Scan and report matches without writing output files.",
     )
+    parser.add_argument(
+        "--verify-on-match",
+        choices=("warn", "fail"),
+        default="warn",
+        help=(
+            "Behavior when verification still finds redacted terms in output: "
+            "'warn' logs and continues, 'fail' marks the file as failed."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -272,6 +281,7 @@ def redact_pdf(
     regex_rules: list[RegexRule],
     case_insensitive: bool,
     dry_run: bool,
+    verify_on_match: str,
 ) -> RedactResult:
     doc = None
     temp_output: Path | None = None
@@ -342,7 +352,13 @@ def redact_pdf(
                 deflate=True,
             )
 
-        verify_redaction(temp_output, terms, regex_rules, case_insensitive)
+        verify_redaction(
+            temp_output,
+            terms,
+            regex_rules,
+            case_insensitive,
+            verify_on_match,
+        )
         temp_output.replace(output_pdf)
 
         return RedactResult(
@@ -371,25 +387,30 @@ def verify_redaction(
     terms: list[str],
     regex_rules: list[RegexRule],
     case_insensitive: bool,
+    verify_on_match: str,
 ) -> None:
+    warning_prefix = "[VERIFY WARNING]"
+    if sys.stderr.isatty():
+        warning_prefix = "\x1b[33m[VERIFY WARNING]\x1b[0m"
+
+    issues: list[str] = []
+
     lowered_terms = [term.lower() for term in terms]
 
     with fitz.open(pdf_path) as doc:
-        extracted = "\n".join(page.get_text("text") for page in doc)
+        extracted = "\n".join(str(page.get_text("text")) for page in doc)
 
     haystack = extracted.lower() if case_insensitive else extracted
 
     for i, term in enumerate(terms):
         needle = lowered_terms[i] if case_insensitive else term
         if needle and needle in haystack:
-            raise RuntimeError(
-                f"Verification failed: term still found in extracted text: {term!r}"
-            )
+            issues.append(f"term still found in extracted text: {term!r}")
 
     for rule in regex_rules:
         if rule.compiled.search(extracted):
-            raise RuntimeError(
-                f"Verification failed: regex still matched extracted text: {rule.pattern_text!r}"
+            issues.append(
+                f"regex still matched extracted text: {rule.pattern_text!r}"
             )
 
     raw = pdf_path.read_bytes()
@@ -397,9 +418,16 @@ def verify_redaction(
     for i, term in enumerate(terms):
         needle = (lowered_terms[i] if case_insensitive else term).encode("utf-8")
         if needle and needle in raw_haystack:
-            raise RuntimeError(
-                f"Verification warning: term bytes still appear in file: {term!r}"
-            )
+            issues.append(f"term bytes still appear in file: {term!r}")
+
+    if not issues:
+        return
+
+    if verify_on_match == "fail":
+        raise RuntimeError(f"Verification failed: {issues[0]}")
+
+    for issue in issues:
+        print(f"{warning_prefix} {issue}", file=sys.stderr)
 
 
 def main() -> int:
@@ -430,6 +458,7 @@ def main() -> int:
             regex_rules=regex_rules,
             case_insensitive=args.case_insensitive,
             dry_run=args.dry_run,
+            verify_on_match=args.verify_on_match,
         )
         results.append(result)
 

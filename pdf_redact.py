@@ -1,0 +1,452 @@
+from __future__ import annotations
+
+import argparse
+import re
+import shutil
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+try:
+    import fitz  # PyMuPDF
+except ImportError as exc:  # pragma: no cover
+    print(
+        "Missing dependency: pymupdf. Install with: python -m pip install pymupdf",
+        file=sys.stderr,
+    )
+    raise SystemExit(2) from exc
+
+
+@dataclass
+class RedactResult:
+    input_path: Path
+    output_path: Path
+    matches: int
+    success: bool
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class RegexRule:
+    pattern_text: str
+    compiled: re.Pattern[str]
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="pdf-redact",
+        description=(
+            "Safely redact terms from PDF files using native PDF redaction operations."
+        ),
+    )
+    parser.add_argument(
+        "--term",
+        dest="terms",
+        action="append",
+        default=[],
+        help="Term to redact. Repeat for multiple terms.",
+    )
+    parser.add_argument(
+        "--regex-term",
+        dest="regex_terms",
+        action="append",
+        default=[],
+        help="Regex pattern to redact. Repeat for multiple patterns.",
+    )
+    parser.add_argument(
+        "--terms-file",
+        dest="terms_files",
+        action="append",
+        default=[],
+        help=(
+            "File with one term per line. Plain lines are exact terms. "
+            "Regex lines can start with 're:' or 'regex:' (also supports /pattern/flags)."
+        ),
+    )
+    parser.add_argument(
+        "--source",
+        required=True,
+        help="Path to a single PDF file or a directory containing PDFs.",
+    )
+    parser.add_argument(
+        "--output-path",
+        required=True,
+        help="Directory where redacted PDFs will be written.",
+    )
+    parser.add_argument(
+        "-r",
+        "--recursive",
+        action="store_true",
+        help="Recursively scan subdirectories when source is a directory.",
+    )
+    parser.add_argument(
+        "--case-insensitive",
+        action="store_true",
+        help="Match terms case-insensitively.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Scan and report matches without writing output files.",
+    )
+    return parser.parse_args()
+
+
+def _parse_inline_regex(term: str) -> tuple[str, int] | None:
+    if len(term) < 2 or not term.startswith("/"):
+        return None
+
+    slash = term.rfind("/")
+    if slash <= 0:
+        return None
+
+    pattern = term[1:slash]
+    flag_text = term[slash + 1 :]
+
+    flags = 0
+    for char in flag_text:
+        if char == "i":
+            flags |= re.IGNORECASE
+        elif char == "m":
+            flags |= re.MULTILINE
+        elif char == "s":
+            flags |= re.DOTALL
+        else:
+            raise ValueError(f"Unsupported regex flag in terms file: {char!r}")
+
+    return pattern, flags
+
+
+def parse_terms_file(file_path: Path) -> tuple[list[str], list[tuple[str, int]]]:
+    literal_terms: list[str] = []
+    regex_terms: list[tuple[str, int]] = []
+
+    for line_number, raw_line in enumerate(file_path.read_text(encoding="utf-8").splitlines(), 1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        lowered = line.lower()
+        if lowered.startswith("regex:"):
+            regex_terms.append((line[6:].strip(), 0))
+            continue
+
+        if lowered.startswith("re:"):
+            regex_terms.append((line[3:].strip(), 0))
+            continue
+
+        parsed_inline = _parse_inline_regex(line)
+        if parsed_inline is not None:
+            regex_terms.append(parsed_inline)
+            continue
+
+        literal_terms.append(line)
+
+    return literal_terms, regex_terms
+
+
+def build_term_sets(args: argparse.Namespace) -> tuple[list[str], list[RegexRule]]:
+    exact_terms = [term for term in args.terms if term]
+    regex_specs: list[tuple[str, int]] = [(pattern, 0) for pattern in args.regex_terms if pattern]
+
+    for file_arg in args.terms_files:
+        file_path = Path(file_arg).expanduser().resolve()
+        if not file_path.exists():
+            raise FileNotFoundError(f"Terms file does not exist: {file_path}")
+        from_file_exact, from_file_regex = parse_terms_file(file_path)
+        exact_terms.extend(from_file_exact)
+        regex_specs.extend(from_file_regex)
+
+    if not exact_terms and not regex_specs:
+        raise ValueError(
+            "At least one term is required via --term, --regex-term, or --terms-file."
+        )
+
+    regex_rules: list[RegexRule] = []
+    for pattern_text, extra_flags in regex_specs:
+        flags = extra_flags | (re.IGNORECASE if args.case_insensitive else 0)
+        try:
+            compiled = re.compile(pattern_text, flags)
+        except re.error as exc:
+            raise ValueError(f"Invalid regex pattern {pattern_text!r}: {exc}") from exc
+        regex_rules.append(RegexRule(pattern_text=pattern_text, compiled=compiled))
+
+    return exact_terms, regex_rules
+
+
+def list_pdf_inputs(source: Path, recursive: bool) -> list[Path]:
+    if not source.exists():
+        raise FileNotFoundError(f"Source does not exist: {source}")
+
+    if source.is_file():
+        if source.suffix.lower() != ".pdf":
+            raise ValueError(f"Source file is not a PDF: {source}")
+        return [source]
+
+    if source.is_dir():
+        pattern = "**/*.pdf" if recursive else "*.pdf"
+        files = sorted(source.glob(pattern))
+        if not files:
+            raise ValueError(f"No PDF files found in: {source}")
+        return [f for f in files if f.is_file()]
+
+    raise ValueError(f"Unsupported source type: {source}")
+
+
+def output_path_for(input_pdf: Path, source: Path, output_root: Path) -> Path:
+    if source.is_file():
+        return output_root / input_pdf.name
+    relative = input_pdf.relative_to(source)
+    return output_root / relative
+
+
+def _search_flags(case_insensitive: bool) -> int:
+    base = (
+        fitz.TEXT_DEHYPHENATE
+        | fitz.TEXT_PRESERVE_WHITESPACE
+        | fitz.TEXT_PRESERVE_LIGATURES
+    )
+    if case_insensitive:
+        base |= getattr(fitz, "TEXT_IGNORECASE", 0)
+    return base
+
+
+def _regex_rects_for_page(page: fitz.Page, regex_rules: list[RegexRule]) -> tuple[list[fitz.Rect], int]:
+    if not regex_rules:
+        return [], 0
+
+    words = page.get_text("words", sort=True)
+    if not words:
+        return [], 0
+
+    grouped: dict[tuple[int, int], list[tuple[float, float, float, float, str, int]]] = {}
+    for word in words:
+        x0, y0, x1, y1, text, block_no, line_no, word_no = word
+        grouped.setdefault((block_no, line_no), []).append((x0, y0, x1, y1, text, word_no))
+
+    rects: list[fitz.Rect] = []
+    match_count = 0
+
+    for key in grouped:
+        line_words = sorted(grouped[key], key=lambda w: w[5])
+        pieces: list[str] = []
+        spans: list[tuple[int, int, fitz.Rect]] = []
+        cursor = 0
+
+        for index, (x0, y0, x1, y1, text, _) in enumerate(line_words):
+            start = cursor
+            pieces.append(text)
+            cursor += len(text)
+            end = cursor
+            spans.append((start, end, fitz.Rect(x0, y0, x1, y1)))
+
+            if index < len(line_words) - 1:
+                pieces.append(" ")
+                cursor += 1
+
+        line_text = "".join(pieces)
+        if not line_text:
+            continue
+
+        for rule in regex_rules:
+            for match in rule.compiled.finditer(line_text):
+                if match.start() == match.end():
+                    continue
+                hit_rects = [
+                    rect
+                    for start, end, rect in spans
+                    if start < match.end() and end > match.start()
+                ]
+                if hit_rects:
+                    rects.extend(hit_rects)
+                    match_count += 1
+
+    return rects, match_count
+
+
+def redact_pdf(
+    input_pdf: Path,
+    output_pdf: Path,
+    terms: list[str],
+    regex_rules: list[RegexRule],
+    case_insensitive: bool,
+    dry_run: bool,
+) -> RedactResult:
+    doc = None
+    temp_output: Path | None = None
+
+    try:
+        doc = fitz.open(input_pdf)
+        total_matches = 0
+        flags = _search_flags(case_insensitive)
+
+        for page in doc:
+            page_matches = 0
+            page_rects: list[fitz.Rect] = []
+            for term in terms:
+                rects = page.search_for(term, flags=flags)
+                if not rects:
+                    continue
+                page_matches += len(rects)
+                page_rects.extend(rects)
+
+            regex_rects, regex_matches = _regex_rects_for_page(page, regex_rules)
+            page_matches += regex_matches
+            page_rects.extend(regex_rects)
+
+            seen_rects: set[tuple[float, float, float, float]] = set()
+            for rect in page_rects:
+                key = (
+                    round(rect.x0, 3),
+                    round(rect.y0, 3),
+                    round(rect.x1, 3),
+                    round(rect.y1, 3),
+                )
+                if key in seen_rects:
+                    continue
+                seen_rects.add(key)
+                page.add_redact_annot(rect, fill=(0, 0, 0), text="")
+
+            if page_matches > 0 and not dry_run:
+                page.apply_redactions()
+            total_matches += page_matches
+
+        if dry_run:
+            return RedactResult(
+                input_path=input_pdf,
+                output_path=output_pdf,
+                matches=total_matches,
+                success=True,
+            )
+
+        output_pdf.parent.mkdir(parents=True, exist_ok=True)
+
+        with NamedTemporaryFile(
+            mode="wb",
+            prefix=f"{output_pdf.stem}.",
+            suffix=".tmp.pdf",
+            dir=output_pdf.parent,
+            delete=False,
+        ) as tmpf:
+            temp_output = Path(tmpf.name)
+
+        if total_matches == 0:
+            shutil.copy2(input_pdf, temp_output)
+        else:
+            doc.save(
+                temp_output,
+                incremental=False,
+                garbage=4,
+                clean=True,
+                deflate=True,
+            )
+
+        verify_redaction(temp_output, terms, regex_rules, case_insensitive)
+        temp_output.replace(output_pdf)
+
+        return RedactResult(
+            input_path=input_pdf,
+            output_path=output_pdf,
+            matches=total_matches,
+            success=True,
+        )
+    except Exception as exc:  # broad by design for CLI reporting
+        if temp_output and temp_output.exists():
+            temp_output.unlink(missing_ok=True)
+        return RedactResult(
+            input_path=input_pdf,
+            output_path=output_pdf,
+            matches=0,
+            success=False,
+            error=str(exc),
+        )
+    finally:
+        if doc is not None:
+            doc.close()
+
+
+def verify_redaction(
+    pdf_path: Path,
+    terms: list[str],
+    regex_rules: list[RegexRule],
+    case_insensitive: bool,
+) -> None:
+    lowered_terms = [term.lower() for term in terms]
+
+    with fitz.open(pdf_path) as doc:
+        extracted = "\n".join(page.get_text("text") for page in doc)
+
+    haystack = extracted.lower() if case_insensitive else extracted
+
+    for i, term in enumerate(terms):
+        needle = lowered_terms[i] if case_insensitive else term
+        if needle and needle in haystack:
+            raise RuntimeError(
+                f"Verification failed: term still found in extracted text: {term!r}"
+            )
+
+    for rule in regex_rules:
+        if rule.compiled.search(extracted):
+            raise RuntimeError(
+                f"Verification failed: regex still matched extracted text: {rule.pattern_text!r}"
+            )
+
+    raw = pdf_path.read_bytes()
+    raw_haystack = raw.lower() if case_insensitive else raw
+    for i, term in enumerate(terms):
+        needle = (lowered_terms[i] if case_insensitive else term).encode("utf-8")
+        if needle and needle in raw_haystack:
+            raise RuntimeError(
+                f"Verification warning: term bytes still appear in file: {term!r}"
+            )
+
+
+def main() -> int:
+    args = parse_args()
+    source = Path(args.source).expanduser().resolve()
+    output_root = Path(args.output_path).expanduser().resolve()
+    try:
+        terms, regex_rules = build_term_sets(args)
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    output_root.mkdir(parents=True, exist_ok=True)
+
+    try:
+        inputs = list_pdf_inputs(source, args.recursive)
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    results: list[RedactResult] = []
+    for input_pdf in inputs:
+        output_pdf = output_path_for(input_pdf, source, output_root)
+        result = redact_pdf(
+            input_pdf=input_pdf,
+            output_pdf=output_pdf,
+            terms=terms,
+            regex_rules=regex_rules,
+            case_insensitive=args.case_insensitive,
+            dry_run=args.dry_run,
+        )
+        results.append(result)
+
+        if result.success:
+            mode = "DRY-RUN" if args.dry_run else "OK"
+            print(f"[{mode}] {result.input_path} -> {result.output_path} ({result.matches} matches)")
+        else:
+            print(f"[ERROR] {result.input_path}: {result.error}", file=sys.stderr)
+
+    failures = [r for r in results if not r.success]
+    total_matches = sum(r.matches for r in results)
+    print(
+        f"Processed {len(results)} file(s), {len(failures)} failure(s), {total_matches} total match(es)."
+    )
+
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

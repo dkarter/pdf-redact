@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pdf-redact"
+version = "0.1.0"
+description = "Safe PDF redaction CLI using PyMuPDF"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "pymupdf>=1.24.0",
+]
+
+[project.scripts]
+pdf-redact = "pdf_redact:main"

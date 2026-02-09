@@ -1,4 +1,11 @@
 [tools]
+committed = "latest"
+dprint = "latest"
+gitleaks = "latest"
+lefthook = "latest"
 python = "3.14.3"
 task = "latest"
 usage = "latest"
+
+[hooks]
+postinstall = "lefthook install"

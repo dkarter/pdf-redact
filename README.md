@@ -55,12 +55,6 @@ Using uv from a local checkout:
 uv tool install .
 ```
 
-Using mise with the pipx backend (which uses uv under the hood):
-
-```bash
-mise use -g "pipx:git+https://github.com/dkarter/pdf-redact.git"
-```
-
 After install, verify:
 
 ```bash

@@ -71,7 +71,7 @@ jobs:
           "ASSET_NAME=$assetName" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Upload asset to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event.release.tag_name }}
           files: ${{ env.ASSET_NAME }}
@@ -79,7 +79,7 @@ jobs:
       - name: Upload completion assets to release
         # should only run once
         if: matrix.target_os == 'linux'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event.release.tag_name }}
           files: |
